@@ -1,0 +1,190 @@
+mod IMP-SYNTAX is
+    
+    protecting INT .
+    protecting BOOL .
+    protecting QID .
+    protecting FLOAT .
+    *** Importing a module M0 into M in protecting mode intuitively means that no junk and no confusion are added to M0when we include it in M.
+
+    sort AExp .
+    subsorts Int Qid < AExp .
+    op _+_ : AExp AExp -> AExp [ditto] .
+    op _-_ : AExp AExp -> AExp [ditto] .
+    op _/_ : AExp AExp -> AExp .
+    op _*_ : AExp AExp -> AExp .
+
+    op pi : -> Float .
+    eq pi = 3.1415926535897931 .
+
+    *** TRIGONOMETRIC OPERATIONS
+
+    op sin(_) : AExp -> Float .
+    op cos(_) : AExp -> Float .
+    op tan(_) : AExp -> Float .
+    op ctan(_) : AExp -> Float .
+    op asin(_) : AExp -> Float .
+    op acos(_) : AExp -> Float .
+    op atan(_) : AExp -> Float .
+    op actan(_) : AExp -> Float .
+
+    *** TRANSCENDENTAL OPERATIONS
+
+    op exp(_) : AExp -> Float .
+    op log(_) : AExp -> Float .
+
+    sort BExp .
+    subsort Bool < BExp .
+    op !_ : BExp -> BExp .
+    op _&&_ : BExp BExp -> BExp .
+    op _<=_ : AExp AExp -> BExp [ditto] .
+
+    sort Block .
+    op {_} : Stmt -> Block .
+    op {} : -> Block .
+
+    sort Stmt .
+    op _=_ : Qid AExp -> Stmt .
+    op if_then_else_ : BExp Block Block -> Stmt .
+    op while_do_ : BExp Block -> Stmt .
+    op _;_ : Stmt Stmt -> Stmt [assoc prec 100] .
+
+endm
+
+mod IMP is
+    protecting IMP-SYNTAX .
+
+    sort State .
+    op _|->_ : Qid Int -> State .
+    op .state : -> State .
+    op __ : State State -> State [comm assoc prec 100 id: .state] .
+
+    var X : Qid .
+    vars I I' : Int .
+    vars Sigma Sigma' Sigma'' : State .
+    vars A1 A2 A : AExp .
+    vars I1 I2 : Int .
+    vars B B' : Bool .
+    vars B1 B2 : BExp .
+    vars S S1 S2 : Stmt .
+    var F : Float .
+
+    *** lookup
+
+    op _(_) : State Qid -> Int .
+    eq (X |-> I Sigma) (X) = I .
+    op _(_) : State Qid -> Float .
+    eq (X |-> F Sigma) (F) = F .
+
+    *** update
+    op _[_/_] : State Int Qid-> State .
+    eq (X |-> I' Sigma) [ I / X ] = (X |-> I Sigma) .
+
+
+    sort Cfg .
+    op <_> : Int -> Cfg .
+    op <_,_> : AExp State -> Cfg .
+    op <_> : Bool -> Cfg .
+    op <_,_> : BExp State -> Cfg .
+    op <_,_> : Block State -> Cfg .
+    op <_> : State -> Cfg .
+    op <_,_> : Stmt State -> Cfg .
+
+    *** int
+    rl < I , Sigma > => < I > .
+
+    *** lookup
+    rl < X , Sigma > => < Sigma(X) > .
+
+    *** add
+    crl < A1 + A2 , Sigma > => < I1 + I2 , Sigma >
+      if < A1 , Sigma > => < I1 > /\ < A2 , Sigma > => < I2 > .
+
+    *** substraction
+    crl < A1 - A2 , Sigma > => < I1 - I2 , Sigma >
+      if < A1 , Sigma > => < I1 > /\ < A2 , Sigma > => < I2 > .
+
+    *** div
+    crl < A1 / A2 , Sigma > => < I1 quo I2 , Sigma >
+      if < A1 , Sigma > => < I1 > /\ < A2 , Sigma > => < I2 > /\ I2 =/= 0 .
+
+    *** multiplication
+    crl < A1 * A2 , Sigma > => < I1 * I2 , Sigma >
+      if < A1 , Sigma > => < I1 > /\ < A2 , Sigma > => < I2 > .
+
+    *** bool
+    rl < B , Sigma > => < B > .
+
+    *** leq
+    crl < A1 <= A2 , Sigma > => < I1 <= I2 , Sigma >
+      if < A1 , Sigma > => < I1 > /\ < A2 , Sigma > => < I2 > .
+
+    *** not
+    crl < ! B1 , Sigma > => < true > if < B1 , Sigma > => < false > .
+    crl < ! B1 , Sigma > => < false > if < B1 , Sigma > => < true > .
+
+    *** and
+    crl < B1 && B2 , Sigma > => < B2 , Sigma > if < B1 , Sigma > => < true > .
+    crl < B1 && B2 , Sigma > => < false > if < B1 , Sigma > => < false > .
+
+    *** block: empty
+    rl < { } , Sigma > => < Sigma > .
+
+    *** non-empty block
+    crl < { S } , Sigma > => < Sigma' > if < S , Sigma > => < Sigma' > .
+
+    *** assign
+    crl < X = A , Sigma > => < Sigma [ I / X ] > if < A , Sigma > => < I > .
+
+    *** seq
+    crl < S1 ; S2 , Sigma > => < Sigma'' > if < S1 , Sigma > => < Sigma' > /\ < S2 , Sigma' > => < Sigma'' > .
+
+    *** if-true
+    crl < if ( B1 ) then { S1 } else { S2 } , Sigma > => < Sigma' >
+    if < B1, Sigma > => < true > /\ < S1 , Sigma > => < Sigma' > .
+    *** if-false
+    crl < if ( B1 ) then { S1 } else { S2 } , Sigma > => < Sigma' >
+    if < B1 , Sigma > => < false > /\ < S2 , Sigma > => < Sigma' > .
+
+    *** while true
+    crl < while ( B1 ) do { S } , Sigma > => < Sigma' >
+      if < B1 , Sigma > => < true > /\ < S ; while ( B1) do { S } , Sigma > => < Sigma' > .
+
+    *** while false
+    crl < while ( B1 ) do { S } , Sigma > => < Sigma >
+      if < B1 , Sigma > => < false > .
+
+    *** sin
+    ***crl < sin (A) , Sigma > => < , Sigma > 
+      ***if < A , Sigma > => < F > .
+
+endm 
+
+rewrite in IMP : < 2 , 'n |-> 2 > .
+rewrite in IMP : < 'n , 'n |-> 2 > .
+rewrite in IMP : < 'n + 2 , 'n |-> 2 > .
+rewrite in IMP : < 'n / 2 , 'n |-> 2 > .
+rewrite in IMP : < 'n / 0 , 'n |-> 2 > .
+rewrite in IMP : < 'n - 2 , 'n |-> 2 > .
+rewrite in IMP : < 'n * 2 , 'n |-> 2 > .
+
+rewrite in IMP : < true , 'n |-> 43 > .
+rewrite in IMP : < 'n <= 'm , 'm |-> 34 'n |-> 43 > .
+rewrite in IMP : < 'm <= 'n , 'm |-> 34 'n |-> 43 > .
+rewrite in IMP : < ! ('n <= 'm) , 'm |-> 34 'n |-> 43 > .
+rewrite in IMP : < ! ('m <= 'n) , 'm |-> 34 'n |-> 43 > .
+rewrite in IMP : < ! ('n <= 'm) && ! ('m <= 'n) , 'm |-> 34 'n |-> 43 > .
+rewrite in IMP : < ! ('n <= 'm) && ! ('n <= 'm) , 'm |-> 34 'n |-> 43 > .
+
+rewrite in IMP : < { } , 'm |-> 34 'n |-> 43 > .
+rewrite in IMP : < 'n = 324 , 'm |-> 34 'n |-> 43 > .
+rewrite in IMP : < { 'n = 324 } , 'm |-> 34 'n |-> 43 > .
+rewrite in IMP : < !('n <= 0 ) , 'm |-> 34 'n |-> 43 > .
+rewrite in IMP : < 'n = 100 , 'm |-> 34 'n |-> 43 > .
+rewrite in IMP : < if !('n <= 0 ) then { 'n = 100 } else { 'n = 200 } , 'm |-> 34 'n |-> 43 > .
+rewrite in IMP : < if ('n <= 0 ) then { 'n = 100 } else { 'n = 200 } , 'm |-> 34 'n |-> 43 > .
+
+rewrite in IMP : < while !('n <= 0 ) do { 'n = 'n + (-1) } , 'm |-> 34 'n |-> 43 > .
+rewrite in IMP : < while ('n <= 0 ) do { 'n = 'n + (-1) } , 'm |-> 34 'n |-> 43 > .
+***rewrite in IMP : < sin('x) , 'x |-> 0.0 > .
+***rewrite in IMP : < 'x , 'x |-> 3.14 > .
+***https://en.wikipedia.org/wiki/Taylor_series#List_of_Maclaurin_series_of_some_common_functions
